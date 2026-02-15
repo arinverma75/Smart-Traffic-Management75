@@ -1,0 +1,523 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Smart Traffic Management</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Outfit:wght@400;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #0d1117;
+      --surface: #161b22;
+      --border: #30363d;
+      --text: #e6edf3;
+      --muted: #8b949e;
+      --accent: #58a6ff;
+      --success: #3fb950;
+      --warning: #d29922;
+      --danger: #f85149;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Outfit', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      line-height: 1.5;
+    }
+    .container { max-width: 1200px; margin: 0 auto; padding: 1.5rem; }
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 1rem;
+      padding-bottom: 1.5rem;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 1.5rem;
+    }
+    h1 {
+      font-size: 1.5rem;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .logo { font-size: 1.75rem; }
+    .tabs {
+      display: flex;
+      gap: 0.25rem;
+      background: var(--surface);
+      padding: 0.25rem;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+    }
+    .tabs button {
+      font-family: inherit;
+      font-size: 0.9rem;
+      padding: 0.5rem 1rem;
+      border: none;
+      background: transparent;
+      color: var(--muted);
+      border-radius: 8px;
+      cursor: pointer;
+      transition: color 0.2s, background 0.2s;
+    }
+    .tabs button:hover { color: var(--text); }
+    .tabs button.active { background: var(--accent); color: var(--bg); }
+    main { display: grid; gap: 1.5rem; }
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1.25rem;
+    }
+    .card h2 {
+      font-size: 1rem;
+      font-weight: 600;
+      margin-bottom: 0.75rem;
+      color: var(--muted);
+    }
+    .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
+    @media (max-width: 768px) { .grid2 { grid-template-columns: 1fr; } }
+    .video-wrap {
+      position: relative;
+      background: #000;
+      border-radius: 10px;
+      overflow: hidden;
+      aspect-ratio: 16/10;
+    }
+    .video-wrap img,
+    .video-wrap video {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      display: block;
+    }
+    .video-placeholder {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      color: var(--muted);
+      gap: 0.5rem;
+    }
+    .video-placeholder.hidden { display: none; }
+    .state-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.5rem 0.75rem;
+      border-radius: 8px;
+      font-size: 0.9rem;
+      font-weight: 600;
+    }
+    .state-badge.low { background: rgba(63, 185, 80, 0.2); color: var(--success); }
+    .state-badge.medium { background: rgba(210, 153, 34, 0.2); color: var(--warning); }
+    .state-badge.high { background: rgba(248, 81, 73, 0.2); color: #ff7b72; }
+    .state-badge.congested { background: rgba(248, 81, 73, 0.3); color: var(--danger); }
+    .suggestion {
+      margin-top: 0.75rem;
+      padding: 0.75rem;
+      background: rgba(88, 166, 255, 0.1);
+      border-radius: 8px;
+      border-left: 3px solid var(--accent);
+      font-size: 0.9rem;
+      color: var(--muted);
+    }
+    .counts {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+    }
+    .count-pill {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.85rem;
+      padding: 0.35rem 0.65rem;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+    }
+    .count-pill span { color: var(--muted); margin-right: 0.35rem; }
+    .chart-wrap {
+      height: 80px;
+      display: flex;
+      align-items: flex-end;
+      gap: 2px;
+    }
+    .chart-bar {
+      flex: 1;
+      min-width: 4px;
+      background: var(--accent);
+      border-radius: 2px 2px 0 0;
+      opacity: 0.8;
+    }
+    .upload-zone {
+      border: 2px dashed var(--border);
+      border-radius: 10px;
+      padding: 2rem;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color 0.2s, background 0.2s;
+    }
+    .upload-zone:hover, .upload-zone.dragover { border-color: var(--accent); background: rgba(88, 166, 255, 0.05); }
+    .upload-zone input { display: none; }
+    .upload-zone p { color: var(--muted); margin-top: 0.5rem; font-size: 0.9rem; }
+    button.primary {
+      font-family: inherit;
+      font-size: 0.95rem;
+      padding: 0.6rem 1.2rem;
+      background: var(--accent);
+      color: var(--bg);
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      font-weight: 600;
+      transition: opacity 0.2s;
+    }
+    button.primary:hover { opacity: 0.9; }
+    button.primary:disabled { opacity: 0.5; cursor: not-allowed; }
+    .live-badge {
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      background: var(--success);
+      border-radius: 50%;
+      animation: pulse 1.5s ease-in-out infinite;
+    }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+    .alert-box {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.5rem 0.75rem;
+      border-radius: 8px;
+      margin-bottom: 0.5rem;
+      font-size: 0.9rem;
+    }
+    .alert-box.accident { background: rgba(248, 81, 73, 0.2); color: var(--danger); }
+    .alert-box.ambulance { background: rgba(63, 185, 80, 0.2); color: var(--success); }
+    .table-wrap { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+    th, td { padding: 0.5rem 0.75rem; text-align: left; border-bottom: 1px solid var(--border); }
+    th { color: var(--muted); font-weight: 600; }
+    .btn-sm {
+      padding: 0.3rem 0.6rem;
+      font-size: 0.8rem;
+      border-radius: 6px;
+      border: none;
+      cursor: pointer;
+      background: var(--accent);
+      color: var(--bg);
+      font-family: inherit;
+    }
+    .btn-sm:hover { opacity: 0.9; }
+    .btn-sm.secondary { background: var(--surface); color: var(--text); border: 1px solid var(--border); }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1><span class="logo">🚦</span> Smart Traffic Management</h1>
+      <div class="tabs">
+        <button type="button" class="active" data-tab="live">Live / Upload</button>
+        <button type="button" data-tab="camera">Camera</button>
+        <button type="button" data-tab="violations">Violations & Challans</button>
+      </div>
+    </header>
+    <main>
+      <div class="grid2">
+        <div class="card">
+          <h2>Feed</h2>
+          <div class="video-wrap">
+            <img id="feedImg" src="" alt="Processed feed" style="display:none" />
+            <video id="feedVideo" style="display:none" autoplay muted playsinline></video>
+            <div id="placeholder" class="video-placeholder">
+              Drop an image or video here, or use the buttons below.
+            </div>
+          </div>
+          <div style="margin-top:0.75rem; display:flex; gap:0.5rem; flex-wrap:wrap;">
+            <label class="upload-zone" style="margin:0; padding:0.6rem 1rem; flex:1; min-width:120px;">
+              <input type="file" id="fileImage" accept="image/*" />
+              Image
+            </label>
+            <label class="upload-zone" style="margin:0; padding:0.6rem 1rem; flex:1; min-width:120px;">
+              <input type="file" id="fileVideo" accept="video/*" />
+              Video
+            </label>
+          </div>
+          <div style="margin-top:0.75rem;">
+            <a href="/api/camera/stream" target="_blank" rel="noopener" class="primary" style="display:inline-block; text-decoration:none;">Open camera stream</a>
+          </div>
+        </div>
+        <div class="card">
+          <h2>Traffic state <span class="live-badge"></span></h2>
+          <div id="stateMessage" class="state-badge low">No data yet</div>
+          <p id="stateText" style="margin-top:0.5rem; color: var(--muted); font-size:0.9rem;">Start a video or camera feed to analyze traffic.</p>
+          <div id="suggestion" class="suggestion" style="display:none;"></div>
+          <h2 style="margin-top:1rem;">Counts</h2>
+          <div id="counts" class="counts"></div>
+          <h2 style="margin-top:1rem;">Recent activity</h2>
+          <div id="chart" class="chart-wrap"></div>
+          <h2 style="margin-top:1rem;">Alerts</h2>
+          <div id="alertAccident" class="alert-box accident" style="display:none;">⚠ Possible accident detected — check feed.</div>
+          <div id="alertAmbulance" class="alert-box ambulance" style="display:none;">
+            <span>🚑 Ambulance route priority active — clear path.</span>
+            <button type="button" class="btn-sm secondary" id="btnAmbulanceOff">Turn off</button>
+          </div>
+          <div id="ambulanceToggle" style="margin-top:0.5rem;">
+            <button type="button" class="btn-sm secondary" id="btnAmbulanceOn">Set ambulance route priority</button>
+          </div>
+        </div>
+      </div>
+      <div class="card" id="panelViolations" style="display:none;">
+        <h2>Violations (Lane, No helmet, Accident)</h2>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Type</th><th>Vehicle</th><th>Details</th><th>Time</th><th>Action</th></tr></thead>
+            <tbody id="violationsBody"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="card" id="panelChallans" style="display:none;">
+        <h2>Issued Challans</h2>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Challan ID</th><th>Type</th><th>Amount</th><th>Status</th><th>Action</th></tr></thead>
+            <tbody id="challansBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </main>
+  </div>
+  <script>
+    const feedImg = document.getElementById('feedImg');
+    const feedVideo = document.getElementById('feedVideo');
+    const placeholder = document.getElementById('placeholder');
+    const stateMessage = document.getElementById('stateMessage');
+    const stateText = document.getElementById('stateText');
+    const suggestionEl = document.getElementById('suggestion');
+    const countsEl = document.getElementById('counts');
+    const chartEl = document.getElementById('chart');
+
+    function showFeed(imgSrc) {
+      placeholder.classList.add('hidden');
+      feedVideo.style.display = 'none';
+      feedImg.style.display = 'block';
+      feedImg.src = imgSrc;
+    }
+    function showVideo(url) {
+      placeholder.classList.add('hidden');
+      feedImg.style.display = 'none';
+      feedVideo.style.display = 'block';
+      feedVideo.src = url;
+    }
+    function showPlaceholder() {
+      feedImg.style.display = 'none';
+      feedImg.src = '';
+      feedVideo.style.display = 'none';
+      feedVideo.src = '';
+      placeholder.classList.remove('hidden');
+    }
+
+    async function pollStats() {
+      try {
+        const r = await fetch('/api/stats');
+        const d = await r.json();
+        const { state, recent_totals } = d;
+        stateMessage.textContent = state.message;
+        stateMessage.className = 'state-badge ' + state.level;
+        stateText.textContent = state.message;
+        suggestionEl.textContent = state.suggestion;
+        suggestionEl.style.display = state.suggestion ? 'block' : 'none';
+        if (d.by_class) {
+          countsEl.innerHTML = Object.entries(d.by_class).map(([k, v]) =>
+            `<span class="count-pill"><span>${k}</span>${v}</span>`
+          ).join('');
+        } else {
+          countsEl.innerHTML = recent_totals.length ? `<span class="count-pill"><span>total</span>${recent_totals[recent_totals.length - 1]}</span>` : '';
+        }
+        const max = Math.max(1, ...recent_totals);
+        chartEl.innerHTML = recent_totals.slice(-40).map(t =>
+          `<div class="chart-bar" style="height:${(t / max) * 100}%"></div>`
+        ).join('');
+        const accidentEl = document.getElementById('alertAccident');
+        const ambulanceEl = document.getElementById('alertAmbulance');
+        const ambulanceToggleEl = document.getElementById('ambulanceToggle');
+        if (d.accident_alert) accidentEl.style.display = 'flex'; else accidentEl.style.display = 'none';
+        if (d.ambulance_priority) {
+          ambulanceEl.style.display = 'flex';
+          ambulanceToggleEl.style.display = 'none';
+        } else {
+          ambulanceEl.style.display = 'none';
+          ambulanceToggleEl.style.display = 'block';
+        }
+      } catch (_) {}
+    }
+
+    async function pollViolations() {
+      try {
+        const r = await fetch('/api/violations');
+        const d = await r.json();
+        const tbody = document.getElementById('violationsBody');
+        if (!d.violations || !d.violations.length) {
+          tbody.innerHTML = '<tr><td colspan="5">No violations yet.</td></tr>';
+          return;
+        }
+        tbody.innerHTML = d.violations.map(v => {
+          const time = new Date(v.timestamp * 1000).toLocaleString();
+          return `<tr>
+            <td>${v.type.replace(/_/g, ' ')}</td>
+            <td>${v.vehicle_class}</td>
+            <td>${v.details}</td>
+            <td>${time}</td>
+            <td><button type="button" class="btn-sm issue-challan" data-id="${v.id}">Issue Challan</button></td>
+          </tr>`;
+        }).join('');
+        document.querySelectorAll('.issue-challan').forEach(btn => {
+          btn.onclick = async () => {
+            try {
+              const id = btn.getAttribute('data-id');
+              const r = await fetch(`/api/challan?violation_id=${encodeURIComponent(id)}`, { method: 'POST' });
+              const c = await r.json();
+              alert('Challan issued: ' + c.id + ' — Amount: ' + c.amount);
+              pollChallans();
+            } catch (e) { alert('Failed to issue challan'); }
+          };
+        });
+      } catch (_) {}
+    }
+
+    async function pollChallans() {
+      try {
+        const r = await fetch('/api/challans');
+        const d = await r.json();
+        const tbody = document.getElementById('challansBody');
+        if (!d.challans || !d.challans.length) {
+          tbody.innerHTML = '<tr><td colspan="5">No challans yet.</td></tr>';
+          return;
+        }
+        tbody.innerHTML = d.challans.map(c => {
+          return `<tr>
+            <td>${c.id}</td>
+            <td>${c.violation_type.replace(/_/g, ' ')}</td>
+            <td>${c.amount}</td>
+            <td>${c.status}</td>
+            <td><a href="/api/challan/${c.id}/pdf" target="_blank" class="btn-sm">Download PDF</a></td>
+          </tr>`;
+        }).join('');
+      } catch (_) {}
+    }
+
+    setInterval(pollStats, 1500);
+    setInterval(pollViolations, 3000);
+    setInterval(pollChallans, 5000);
+
+    document.getElementById('btnAmbulanceOn').addEventListener('click', async () => {
+      await fetch('/api/ambulance-priority?enable=true', { method: 'POST' });
+      pollStats();
+    });
+    document.getElementById('btnAmbulanceOff').addEventListener('click', async () => {
+      await fetch('/api/ambulance-priority?enable=false', { method: 'POST' });
+      pollStats();
+    });
+
+    document.querySelectorAll('.tabs button').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.tabs button').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        const tab = btn.getAttribute('data-tab');
+        document.getElementById('panelViolations').style.display = tab === 'violations' ? 'block' : 'none';
+        document.getElementById('panelChallans').style.display = tab === 'violations' ? 'block' : 'none';
+        if (tab === 'violations') { pollViolations(); pollChallans(); }
+      });
+    });
+
+    document.getElementById('fileImage').addEventListener('change', async (e) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      const fd = new FormData();
+      fd.append('file', file);
+      try {
+        const r = await fetch('/api/detect-frame', { method: 'POST', body: fd });
+        const d = await r.json();
+        if (d.image_base64) showFeed(d.image_base64);
+        pollStats();
+      } catch (err) {
+        console.error(err);
+      }
+      e.target.value = '';
+    });
+
+    document.getElementById('fileVideo').addEventListener('change', async (e) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      const fd = new FormData();
+      fd.append('file', file);
+      try {
+        placeholder.textContent = 'Processing video... Frames and stats updating below.';
+        showPlaceholder();
+        const r = await fetch('/api/video/upload', { method: 'POST', body: fd });
+        if (!r.body) return;
+        const reader = r.body.getReader();
+        let buf = new Uint8Array(0);
+        const boundary = new Uint8Array([13, 10, 45, 45, 102, 114, 97, 109, 101]); // \r\n--frame
+        const sep = new Uint8Array([13, 10, 13, 10]); // \r\n\r\n
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          const newBuf = new Uint8Array(buf.length + value.length);
+          newBuf.set(buf);
+          newBuf.set(value, buf.length);
+          buf = newBuf;
+          for (let i = 0; i <= buf.length - boundary.length; i++) {
+            if (boundary.every((b, k) => buf[i + k] === b)) {
+              const after = buf.slice(i + boundary.length);
+              for (let j = 0; j <= after.length - sep.length; j++) {
+                if (sep.every((b, k) => after[j + k] === b)) {
+                  const jpeg = after.slice(j + sep.length);
+                  if (jpeg.length > 100) {
+                    const blob = new Blob([jpeg], { type: 'image/jpeg' });
+                    showFeed(URL.createObjectURL(blob));
+                  }
+                  buf = buf.slice(i + boundary.length + j + sep.length);
+                  i = -1;
+                  break;
+                }
+              }
+              break;
+            }
+          }
+        }
+        placeholder.textContent = 'Drop an image or video here, or use the buttons below.';
+      } catch (err) {
+        console.error(err);
+        placeholder.textContent = 'Drop an image or video here, or use the buttons below.';
+      }
+      e.target.value = '';
+    });
+
+    // Drag and drop
+    const wrap = document.querySelector('.video-wrap');
+    wrap.addEventListener('dragover', (e) => { e.preventDefault(); wrap.classList.add('dragover'); });
+    wrap.addEventListener('dragleave', () => wrap.classList.remove('dragover'));
+    wrap.addEventListener('drop', async (e) => {
+      e.preventDefault();
+      wrap.classList.remove('dragover');
+      const file = e.dataTransfer?.files?.[0];
+      if (!file) return;
+      if (file.type.startsWith('image/')) {
+        document.getElementById('fileImage').files = e.dataTransfer.files;
+        document.getElementById('fileImage').dispatchEvent(new Event('change'));
+      } else if (file.type.startsWith('video/')) {
+        document.getElementById('fileVideo').files = e.dataTransfer.files;
+        document.getElementById('fileVideo').dispatchEvent(new Event('change'));
+      }
+    });
+  </script>
+</body>
+</html>
