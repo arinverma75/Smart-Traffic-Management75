@@ -12,8 +12,11 @@ services:
     startCommand: "uvicorn app.main:app --host 0.0.0.0 --port $PORT"
     envVars:
       - key: GOOGLE_MAPS_API_KEY
+        sync: false           # Set this manually in the Render dashboard
       - key: YOLO_MODEL
+        value: yolov8n.pt     # Default YOLO model; override in dashboard if needed
       - key: HELMET_MODEL
+        sync: false           # Set this manually in the Render dashboard (leave blank to disable)
       # Render automatically provides a PORT variable at runtime
     autoDeploy: true
     # optionally set health check path to /api/health
