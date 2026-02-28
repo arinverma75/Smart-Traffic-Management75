@@ -18,4 +18,3 @@ services:
     autoDeploy: true
     # optionally set health check path to /api/health
     healthCheckPath: "/api/health"
-    diskUsage: 1G
