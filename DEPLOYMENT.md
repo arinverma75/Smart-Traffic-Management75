@@ -72,6 +72,9 @@ docker run -p 8000:8000 traffic-app
 
 ### Option 4: Run on a VPS (full control)
 
+> **Tip:** copy `.env.example` from the repository root and edit it with your own values. Rename to `.env` before starting the server, or set environment variables directly in your shell.
+
+
 1. Rent a **Linux VPS** (e.g. DigitalOcean, Linode, AWS EC2 – at least 2 GB RAM, 4 GB for smoother ML).
 2. SSH into the server, install Python 3.10+, clone your repo.
 3. Create venv, install dependencies: `pip install -r requirements.txt`

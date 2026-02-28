@@ -7,7 +7,10 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Outfit:wght@400;600;700&display=swap" rel="stylesheet">
+  <!-- google maps uses its own styles; API key injected below via script -->
   <style>
+    /* map container */
+    #map { height: 360px; width: 100%; border-radius: 8px; }
     :root {
       --bg: #0d1117;
       --surface: #161b22;
@@ -227,6 +230,8 @@
         <button type="button" class="active" data-tab="live">Live / Upload</button>
         <button type="button" data-tab="camera">Camera</button>
         <button type="button" data-tab="violations">Violations & Challans</button>
+        <button type="button" data-tab="map">Map</button>
+        <button type="button" data-tab="admin">Admin</button>
       </div>
     </header>
     <main>
@@ -251,7 +256,14 @@
             </label>
           </div>
           <div style="margin-top:0.75rem;">
-            <a href="/api/camera/stream" target="_blank" rel="noopener" class="primary" style="display:inline-block; text-decoration:none;">Open camera stream</a>
+            <label style="margin-right:0.5rem; color:var(--text);">Camera:
+            <select id="cameraSelect" style="border-radius:6px; padding:0.25rem; background:var(--surface); color:var(--text);">
+              <option value="0">0</option>
+              <option value="1">1</option>
+              <option value="2">2</option>
+            </select>
+          </label>
+          <a href="#" id="cameraLink" target="_blank" rel="noopener" class="primary" style="display:inline-block; text-decoration:none;">Open camera stream</a>
           </div>
         </div>
         <div class="card">
@@ -272,6 +284,47 @@
           <div id="ambulanceToggle" style="margin-top:0.5rem;">
             <button type="button" class="btn-sm secondary" id="btnAmbulanceOn">Set ambulance route priority</button>
           </div>
+        </div>
+      </div>
+      <div class="card" id="panelMap" style="display:none;">
+        <h2>Systems Map</h2>
+        <p style="color:var(--muted); margin-bottom:0.5rem;">Shows registered systems and their online/offline status.</p>
+        <div style="display:flex; gap:0.5rem; margin-bottom:0.5rem; flex-wrap:wrap;">
+          <button type="button" class="btn-sm" id="btnCenterIndia">Center India</button>
+          <input id="areaQuery" placeholder="Search area (e.g. Lucknow)" style="flex:1; padding:0.4rem; border-radius:6px; border:1px solid var(--border); background:var(--surface); color:var(--text);" />
+          <button type="button" class="btn-sm" id="btnSearchArea">Search</button>
+          <input id="sysIdInput" placeholder="system id (e.g. cam-1)" style="width:180px; padding:0.35rem; border-radius:6px; border:1px solid var(--border); background:var(--surface); color:var(--text);" />
+          <button type="button" class="btn-sm" id="btnRegisterSys">Register This System</button>
+          <button type="button" class="btn-sm" id="btnShowSys">Show My System</button>
+        </div>
+        <div id="map"></div>
+      </div>
++      <div class="card" id="panelAdmin" style="display:none;">
+        <h2>Admin Panel</h2>
+        <h3>Report Emergency</h3>
+        <div style="margin-bottom:1rem; display:flex; gap:0.5rem; align-items:center; flex-wrap:wrap;">
+          <select id="emType" style="padding:0.35rem; border-radius:6px;">
+            <option value="accident">Accident</option>
+            <option value="breakdown">Breakdown</option>
+            <option value="other">Other</option>
+          </select>
+          <input id="emDetails" placeholder="Details" style="flex:1; padding:0.35rem; border-radius:6px;" />
+          <input id="emArea" placeholder="Area (optional)" style="width:200px; padding:0.35rem; border-radius:6px;" />
+          <button id="btnReport" type="button" class="btn-sm">Submit</button>
+        </div>
+        <h3>Emergencies</h3>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Type</th><th>Details</th><th>Location</th><th>Time</th></tr></thead>
+            <tbody id="emergenciesBody"></tbody>
+          </table>
+        </div>
+        <h3 style="margin-top:1rem;">Registered Systems</h3>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>ID</th><th>Area</th><th>Status</th><th>Last Seen</th></tr></thead>
+            <tbody id="systemsBody"></tbody>
+          </table>
         </div>
       </div>
       <div class="card" id="panelViolations" style="display:none;">
@@ -416,6 +469,55 @@
     setInterval(pollStats, 1500);
     setInterval(pollViolations, 3000);
     setInterval(pollChallans, 5000);
+    // emergencies and systems poll for admin
+    async function pollEmergencies() {
+      try {
+        const r = await fetch('/api/emergencies');
+        const d = await r.json();
+        const tbody = document.getElementById('emergenciesBody');
+        if (!d.emergencies || !d.emergencies.length) {
+          tbody.innerHTML = '<tr><td colspan="4">No emergencies yet.</td></tr>';
+          return;
+        }
+        tbody.innerHTML = d.emergencies.map(e => {
+          const time = new Date(e.timestamp * 1000).toLocaleString();
+          const loc = e.lat && e.lon ? `${e.lat.toFixed(4)},${e.lon.toFixed(4)}` : (e.system_id||'-');
+          return `<tr><td>${e.type}</td><td>${e.details}</td><td>${loc}</td><td>${time}</td></tr>`;
+        }).join('');
+      } catch(_) {}
+    }
+    async function pollSystemsAdmin() {
+      try {
+        const r = await fetch('/api/systems');
+        const d = await r.json();
+        const tbody = document.getElementById('systemsBody');
+        if (!d.systems || !d.systems.length) {
+          tbody.innerHTML = '<tr><td colspan="4">No systems registered.</td></tr>';
+          return;
+        }
+        tbody.innerHTML = d.systems.map(s=>{
+          const time = s.last_seen?new Date(s.last_seen*1000).toLocaleString():'';
+          return `<tr><td>${s.id}</td><td>${s.area||''}</td><td>${s.status}</td><td>${time}</td></tr>`;
+        }).join('');
+      } catch(_) {}
+    }
+    document.getElementById('btnReport').addEventListener('click', async () => {
+      const type = document.getElementById('emType').value;
+      const details = document.getElementById('emDetails').value.trim();
+      const area = document.getElementById('emArea').value.trim();
+      if (!details) { alert('Enter details'); return; }
+      try {
+        await fetch('/api/emergency', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ type, details, area })
+        });
+        document.getElementById('emDetails').value = '';
+        document.getElementById('emArea').value = '';
+        pollEmergencies();
+        alert('Emergency reported');
+      } catch (e) { console.warn(e); alert('Failed to report'); }
+    });
 
     document.getElementById('btnAmbulanceOn').addEventListener('click', async () => {
       await fetch('/api/ambulance-priority?enable=true', { method: 'POST' });
@@ -425,6 +527,15 @@
       await fetch('/api/ambulance-priority?enable=false', { method: 'POST' });
       pollStats();
     });
+    // camera selection for multiple devices
+    const camSelect = document.getElementById('cameraSelect');
+    const camLink = document.getElementById('cameraLink');
+    function updateCameraLink() {
+      const idx = camSelect.value;
+      camLink.href = `/api/camera/stream?device=${encodeURIComponent(idx)}`;
+    }
+    camSelect.addEventListener('change', updateCameraLink);
+    updateCameraLink();
 
     document.querySelectorAll('.tabs button').forEach(btn => {
       btn.addEventListener('click', () => {
@@ -433,7 +544,11 @@
         const tab = btn.getAttribute('data-tab');
         document.getElementById('panelViolations').style.display = tab === 'violations' ? 'block' : 'none';
         document.getElementById('panelChallans').style.display = tab === 'violations' ? 'block' : 'none';
+        document.getElementById('panelMap').style.display = tab === 'map' ? 'block' : 'none';
+        document.getElementById('panelAdmin').style.display = tab === 'admin' ? 'block' : 'none';
         if (tab === 'violations') { pollViolations(); pollChallans(); }
+        if (tab === 'map') { initMapIfNeeded(); pollSystems(); }
+        if (tab === 'admin') { pollEmergencies(); pollSystemsAdmin(); }
       });
     });
 
@@ -453,15 +568,23 @@
       e.target.value = '';
     });
 
+    // handle video upload with abort control to prevent overlap
+    let currentVideoController = null;
     document.getElementById('fileVideo').addEventListener('change', async (e) => {
       const file = e.target.files?.[0];
       if (!file) return;
+      // abort any existing stream
+      if (currentVideoController) {
+        currentVideoController.abort();
+        currentVideoController = null;
+      }
       const fd = new FormData();
       fd.append('file', file);
       try {
         placeholder.textContent = 'Processing video... Frames and stats updating below.';
         showPlaceholder();
-        const r = await fetch('/api/video/upload', { method: 'POST', body: fd });
+        currentVideoController = new AbortController();
+        const r = await fetch('/api/video/upload', { method: 'POST', body: fd, signal: currentVideoController.signal });
         if (!r.body) return;
         const reader = r.body.getReader();
         let buf = new Uint8Array(0);
@@ -495,8 +618,15 @@
         }
         placeholder.textContent = 'Drop an image or video here, or use the buttons below.';
       } catch (err) {
-        console.error(err);
+        if (err.name === 'AbortError') {
+          console.log('Previous video stream aborted');
+        } else {
+          console.error(err);
+        }
         placeholder.textContent = 'Drop an image or video here, or use the buttons below.';
+        showPlaceholder();
+      } finally {
+        currentVideoController = null;
       }
       e.target.value = '';
     });
@@ -518,6 +648,179 @@
         document.getElementById('fileVideo').dispatchEvent(new Event('change'));
       }
     });
+  </script>
+  <!-- Google Maps JS (api key injected from server) -->
+  <script async defer src="https://maps.googleapis.com/maps/api/js?key={{GOOGLE_MAPS_API_KEY}}&callback=initMap"></script>
+  <script>
+    let map = null;
+    const markersById = {};
+    function initMap() {
+      // this callback is executed once API loads
+      map = new google.maps.Map(document.getElementById('map'), {
+        center: { lat: 22.0, lng: 79.0 },
+        zoom: 5,
+      });
+    }
+    function ensureMap() {
+      if (!map) initMap();
+    }
+
+    function addMarker(id, lat, lon, status, area, last) {
+      if (!map) ensureMap();
+      let marker = markersById[id];
+      const pos = { lat: lat, lng: lon };
+      if (marker) {
+        marker.setPosition(pos);
+      } else {
+        marker = new google.maps.Marker({
+          position: pos,
+          map: map,
+          title: id,
+          icon: {
+            path: google.maps.SymbolPath.CIRCLE,
+            scale: 8,
+            fillColor: status === 'online' ? '#2ECC71' : '#E74C3C',
+            fillOpacity: 0.9,
+            strokeColor: '#000',
+            strokeWeight: 1,
+          },
+        });
+        markersById[id] = marker;
+      }
+      const infowindow = new google.maps.InfoWindow({
+        content: `<strong>${id}</strong><br/>Area: ${area || '-'}<br/>Status: ${status}<br/>Last: ${last}`
+      });
+      marker.addListener('click', () => infowindow.open(map, marker));
+    }
+
+    async function pollSystems() {
+      try {
+        const r = await fetch('/api/systems');
+        const d = await r.json();
+        const systems = d.systems || [];
+        if (!map) ensureMap();
+        let bounds = new google.maps.LatLngBounds();
+        systems.forEach(s => {
+          if (s.lat && s.lon) {
+            const last = s.last_seen ? new Date(s.last_seen * 1000).toLocaleString() : 'never';
+            addMarker(s.id, s.lat, s.lon, s.status, s.area, last);
+            bounds.extend({ lat: s.lat, lng: s.lon });
+          }
+        });
+        // emergencies
+        try {
+          const re = await fetch('/api/emergencies');
+          const de = await re.json();
+          const ems = de.emergencies || [];
+          ems.forEach(e => {
+            if (e.lat && e.lon) {
+              // use red icon
+              const id = `EM-${e.id}`;
+              const old = markersById[id];
+              if (!old) {
+                const marker = new google.maps.Marker({
+                  position: { lat: e.lat, lng: e.lon },
+                  map: map,
+                  title: `Emergency: ${e.type}`,
+                  icon: {
+                    path: google.maps.SymbolPath.CIRCLE,
+                    scale: 6,
+                    fillColor: '#f00',
+                    fillOpacity: 0.7,
+                    strokeColor: '#000',
+                    strokeWeight: 1,
+                  },
+                });
+                marker.addListener('click', () => {
+                  new google.maps.InfoWindow({ content: `<strong>Emergency: ${e.type}</strong><br/>${e.details}` }).open(map, marker);
+                });
+                markersById[id] = marker;
+              }
+              bounds.extend({ lat: e.lat, lng: e.lon });
+            }
+          });
+        } catch (_) {}
+        if (!bounds.isEmpty()) {
+          map.fitBounds(bounds);
+        }
+      } catch (e) {
+        console.warn('pollSystems failed', e);
+      }
+    }
+    // helper: geocode using Nominatim (still free)
+    async function geocode(q) {
+      const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q)}`;
+      const r = await fetch(url, { headers: { 'Accept': 'application/json' } });
+      return r.ok ? await r.json() : [];
+    }
+
+    async function centerIndia() {
+      try {
+        const res = await geocode('India');
+        if (res && res.length) {
+          const bbox = res[0].boundingbox.map(Number); // [south, north, west, east]
+          const sw = { lat: bbox[0], lng: bbox[2] };
+          const ne = { lat: bbox[1], lng: bbox[3] };
+          const bounds = new google.maps.LatLngBounds(sw, ne);
+          map.fitBounds(bounds);
+        }
+      } catch (e) { console.warn('centerIndia failed', e); }
+    }
+
+    async function searchArea() {
+      const q = document.getElementById('areaQuery').value.trim();
+      if (!q) return;
+      try {
+        const res = await geocode(q);
+        if (res && res.length) {
+          const item = res[0];
+          const lat = Number(item.lat);
+          const lon = Number(item.lon);
+          map.setCenter({ lat: lat, lng: lon });
+          map.setZoom(12);
+        } else {
+          alert('Area not found');
+        }
+      } catch (e) { console.warn('searchArea failed', e); }
+    }
+
+    async function registerThisSystem() {
+      const id = document.getElementById('sysIdInput').value.trim() || `browser-${Math.random().toString(36).slice(2,8)}`;
+      let lat = null, lon = null;
+      if (navigator.geolocation) {
+        try {
+          const pos = await new Promise((res, rej) => navigator.geolocation.getCurrentPosition(res, rej, { timeout: 5000 }));
+          lat = pos.coords.latitude; lon = pos.coords.longitude;
+        } catch (_) {}
+      }
+      const area = document.getElementById('areaQuery').value.trim() || 'India';
+      try {
+        await fetch('/api/heartbeat', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ system_id: id, area: area, lat: lat, lon: lon })
+        });
+        alert('Registered system: ' + id);
+        pollSystems();
+      } catch (e) { alert('Failed to register system'); }
+    }
+
+    function showMySystem() {
+      const id = document.getElementById('sysIdInput').value.trim();
+      if (!id) { alert('Enter system id'); return; }
+      const m = markersById[id];
+      if (!m) { alert('System not found or has no coordinates yet'); return; }
+      const latlng = m.getLatLng();
+      map.setView(latlng, 15);
+      m.openPopup();
+    }
+
+    document.getElementById('btnCenterIndia').addEventListener('click', () => { if (!map) initMapIfNeeded(); centerIndia(); });
+    document.getElementById('btnSearchArea').addEventListener('click', () => { if (!map) initMapIfNeeded(); searchArea(); });
+    document.getElementById('btnRegisterSys').addEventListener('click', () => { if (!map) initMapIfNeeded(); registerThisSystem(); });
+    document.getElementById('btnShowSys').addEventListener('click', () => { if (!map) initMapIfNeeded(); showMySystem(); });
+
+    // poll every 5 seconds while page open
+    setInterval(() => { const active = document.querySelector('.tabs button.active')?.getAttribute('data-tab'); if (active === 'map') pollSystems(); }, 5000);
   </script>
 </body>
 </html>

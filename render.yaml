@@ -1,0 +1,21 @@
+# Render.com service definition for Smart Traffic Management
+# When you connect your GitHub repo to Render and enable "Deploy with a render.yaml file",
+# this configuration automatically creates the web service with the correct settings.
+
+services:
+  - type: web
+    name: smart-traffic-management
+    env: python
+    plan: free                  # or change to "starter"/"standard" etc.
+    # if you prefer to use the Dockerfile, change env to "docker" and omit buildCommand
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "uvicorn app.main:app --host 0.0.0.0 --port $PORT"
+    envVars:
+      - key: GOOGLE_MAPS_API_KEY
+      - key: YOLO_MODEL
+      - key: HELMET_MODEL
+      # Render automatically provides a PORT variable at runtime
+    autoDeploy: true
+    # optionally set health check path to /api/health
+    healthCheckPath: "/api/health"
+    diskUsage: 1G

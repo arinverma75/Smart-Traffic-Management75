@@ -4,7 +4,9 @@ from contextlib import asynccontextmanager
 
 import cv2
 import numpy as np
-from fastapi import FastAPI, File, UploadFile, HTTPException
+from fastapi import FastAPI, File, UploadFile, HTTPException, Body
+import uuid
+import time
 from fastapi.responses import HTMLResponse, StreamingResponse, JSONResponse, Response
 
 from app.analytics import get_recent_totals, get_traffic_state, update_history
@@ -19,6 +21,11 @@ from app.violations import (
     is_ambulance_priority,
     set_ambulance_manual,
 )
+from app.heartbeat import register_heartbeat, get_systems, start_sweeper, geocode_area
+
+# emergency reports store
+_emergencies: list[dict] = []
+
 
 
 def run_detection_on_frame(frame_bgr: np.ndarray) -> DetectionResult:
@@ -30,6 +37,11 @@ def run_detection_on_frame(frame_bgr: np.ndarray) -> DetectionResult:
 async def lifespan(app: FastAPI):
     # Pre-load YOLO model on startup
     get_detector()
+    # start heartbeat sweeper (marks systems offline if no heartbeat for 2 minutes)
+    try:
+        start_sweeper(interval_seconds=30, threshold_seconds=120)
+    except Exception:
+        pass
     yield
     # cleanup if needed
     pass
@@ -52,11 +64,15 @@ def _template_path():
 
 @app.get("/")
 async def root():
-    """Serve the dashboard."""
+    """Serve the dashboard, injecting Google Maps API key if provided."""
     path = _template_path()
     if os.path.isfile(path):
         with open(path, encoding="utf-8") as f:
-            return HTMLResponse(f.read())
+            html = f.read()
+        # allow replacement with env var
+        gkey = os.getenv("GOOGLE_MAPS_API_KEY", "")
+        html = html.replace("{{GOOGLE_MAPS_API_KEY}}", gkey)
+        return HTMLResponse(html)
     return HTMLResponse(
         "<h1>Smart Traffic Management</h1><p>Dashboard template not found.</p>"
     )
@@ -65,6 +81,57 @@ async def root():
 @app.get("/api/health")
 async def health():
     return {"status": "ok", "service": "smart-traffic"}
+
+
+@app.post("/api/heartbeat")
+async def heartbeat(payload: dict = Body(...)):
+    """Receive heartbeat from an edge system.
+
+    Expected JSON: { "system_id": "cam-1", "area": "Lucknow", "lat": 26.8467, "lon": 80.9462 }
+    """
+    system_id = payload.get("system_id")
+    if not system_id:
+        raise HTTPException(400, "Missing system_id")
+    area = payload.get("area")
+    lat = payload.get("lat")
+    lon = payload.get("lon")
+    meta = payload.get("meta")
+    try:
+        # if coords missing but area provided, try server-side geocode
+        if (lat is None or lon is None) and area:
+            try:
+                glat, glon = geocode_area(area)
+                if glat is not None and glon is not None:
+                    lat = lat or glat
+                    lon = lon or glon
+            except Exception:
+                pass
+        register_heartbeat(system_id, area=area, lat=lat, lon=lon, meta=meta)
+    except Exception as e:
+        raise HTTPException(500, f"Failed to register heartbeat: {e}")
+    return JSONResponse({"system_id": system_id, "status": "ok"})
+
+
+@app.get("/api/geocode")
+async def geocode(area: str):
+    """Server-side geocode lookup for an area name (uses Nominatim)."""
+    try:
+        lat, lon = geocode_area(area)
+        if lat is None or lon is None:
+            raise HTTPException(404, "Not found")
+        return JSONResponse({"area": area, "lat": lat, "lon": lon})
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(500, str(e))
+
+
+@app.get("/api/systems")
+async def systems_list():
+    """List registered systems and their online/offline status.
+    Returns list of {id, area, lat, lon, last_seen, status}.
+    """
+    return JSONResponse({"systems": get_systems()})
 
 
 @app.get("/api/stats")
@@ -185,6 +252,50 @@ async def issue_challan(violation_id: str):
     })
 
 
+@app.post("/api/emergency")
+async def report_emergency(payload: dict = Body(...)):
+    """Register an emergency complaint from a system or user.
+
+    payload should include: system_id (optional), type (accident|breakdown|other), details, lat, lon.
+    """
+    t = payload.get("type")
+    details = payload.get("details")
+    if not t or not details:
+        raise HTTPException(400, "Missing type or details")
+    lat = payload.get("lat")
+    lon = payload.get("lon")
+    # if location missing and system known use system coords
+    sysid = payload.get("system_id")
+    if (lat is None or lon is None) and sysid:
+        sys = next((s for s in get_systems() if s.get("id") == sysid), None)
+        if sys:
+            lat = lat or sys.get("lat")
+            lon = lon or sys.get("lon")
+    # fallback: geocode area name if provided
+    if (lat is None or lon is None) and payload.get("area"):
+        try:
+            glat, glon = geocode_area(payload.get("area"))
+            lat = lat or glat
+            lon = lon or glon
+        except Exception:
+            pass
+    entry = {
+        "id": str(uuid.uuid4()),
+        "type": t,
+        "details": details,
+        "system_id": sysid,
+        "lat": lat,
+        "lon": lon,
+        "timestamp": time.time(),
+    }
+    _emergencies.append(entry)
+    return JSONResponse(entry)
+
+
+@app.get("/api/emergencies")
+async def list_emergencies():
+    return JSONResponse({"emergencies": list(_emergencies)})
+
 @app.get("/api/challans")
 async def list_challans():
     """List all issued challans."""
@@ -205,11 +316,14 @@ async def download_challan_pdf(challan_id: str):
 
 
 @app.get("/api/camera/stream")
-async def camera_stream():
-    """Live stream from default webcam with detection (if available)."""
-    cap = cv2.VideoCapture(0)
+async def camera_stream(device: int = 0):
+    """Live stream from specified webcam index with detection (if available)."""
+    try:
+        cap = cv2.VideoCapture(device)
+    except Exception:
+        raise HTTPException(503, "Cannot open camera")
     if not cap.isOpened():
-        raise HTTPException(503, "No camera available")
+        raise HTTPException(503, f"Camera {device} not available")
 
     def gen():
         try:
@@ -229,8 +343,7 @@ async def camera_stream():
             cap.release()
 
     return StreamingResponse(
-        gen(), media_type="multipart/x-mixed-replace; boundary=frame"
-    )
+        gen(), media_type="multipart/x-mixed-replace; boundary=frame")
 
 
 if __name__ == "__main__":

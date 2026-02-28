@@ -12,10 +12,18 @@ A web-based **smart traffic management** app that uses **YOLO** (YOLOv8) to dete
 - **Without-helmet detection** – Optional YOLO model for helmet/no-helmet; records violations when the model is configured.
 - **Challan facility** – List violations, issue challans per violation, view issued challans, and **download challan as PDF**.
 - **Dashboard** – Feed, traffic state, counts, alerts (accident, ambulance), violations table with “Issue Challan”, and challans table with “Download PDF”.
+  - **Admin tab**: traffic police can view registered systems, record emergencies, and see incident list. Emergencies can optionally specify area; the system will geocode or use known camera location.
+  - **Map tab**: shows systems and emergency locations.
+  - **Camera tab**: supports selecting device index (0,1,2…) before opening stream for multi-angle setups.
 
 ## Setup
 
 1. **Python 3.10+** and a recent pip.
+
+## Deployment
+
+If you intend to host the service online, see [DEPLOYMENT.md](./DEPLOYMENT.md) for step-by-step guidance including Docker, Railway, Render, and VPS options. The repository also contains a `Dockerfile`, `.dockerignore`, `Procfile` (for Heroku/Render), and an `.env.example` showing the environment variables the app supports.
+
 
 2. **Create a virtual environment (recommended):**
    ```bash
@@ -34,6 +42,8 @@ A web-based **smart traffic management** app that uses **YOLO** (YOLOv8) to dete
    ```bash
    uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
    ```
+
+   *If you want the dashboard map to use Google Maps tiles instead of the default OpenStreetMap/Nominatim lookups, set an environment variable `GOOGLE_MAPS_API_KEY` to your Google Maps JavaScript API key before starting the server. Without a key the map panel will still work but may show a blank area or error message.*
 
 5. Open **http://localhost:8000** in your browser.
 
@@ -66,6 +76,17 @@ Yolo/
 - **Helmet detection:** Set `HELMET_MODEL` to a YOLO model path that has classes like `without_helmet` / `no_helmet`. Leave unset to disable.
 - **Lane termination zone:** In `app/config.py`, `LANE_TERMINATION_ZONE` is `(x_min, y_min, x_max, y_max)` as 0–1 ratios. Default top strip (0, 0, 1, 0.25) = no-entry zone.
 - **Challan amounts:** Edit `CHALLAN_AMOUNTS` in `app/config.py` (e.g. `lane_termination`, `no_helmet`).
+
+## Environment Variables
+
+The application reads several settings from the environment. You can copy `.env.example` and fill in values for deployment.
+
+- `YOLO_MODEL` – path or name of the YOLO model to load (default `yolov8n.pt`).
+- `HELMET_MODEL` – optional path for helmet detection. Leave empty to disable.
+- `GOOGLE_MAPS_API_KEY` – your Google Maps JavaScript API key (enables map tiles and geocoding).
+- `PORT` – port to listen on; cloud platforms usually set this automatically.
+
+Refer to [DEPLOYMENT.md](./DEPLOYMENT.md) for detailed instructions on hosting the service.
 
 ## API
 
