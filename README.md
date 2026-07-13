@@ -1,3 +1,5 @@
+# ARIN VERMA 
+# BATCH 5
 # Smart Traffic Management App
 
 A web-based **smart traffic management** app that uses **YOLO** (YOLOv8) to detect vehicles and pedestrians from images, video, or a live camera. It shows real-time counts, traffic state (low / medium / high / congested), and simple suggestions for signal timing.
